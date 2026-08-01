@@ -9,11 +9,13 @@ import {
 } from "firebase-admin/app";
 
 import {
-  getAuth
+  getAuth,
+  type Auth
 } from "firebase-admin/auth";
 
 import {
-  getFirestore
+  getFirestore,
+  type Firestore
 } from "firebase-admin/firestore";
 
 interface FirebaseServiceAccountJson {
@@ -28,7 +30,8 @@ function readServiceAccount():
   ServiceAccount | null {
   const encodedServiceAccount =
     process.env
-      .FIREBASE_SERVICE_ACCOUNT_BASE64;
+      .FIREBASE_SERVICE_ACCOUNT_BASE64
+      ?.trim();
 
   if (!encodedServiceAccount) {
     return null;
@@ -51,7 +54,7 @@ function readServiceAccount():
       !parsed.private_key
     ) {
       throw new Error(
-        "The service account JSON is missing required fields."
+        "The service account JSON is missing project_id, client_email, or private_key."
       );
     }
 
@@ -66,7 +69,7 @@ function readServiceAccount():
     };
   } catch (error) {
     console.error(
-      "Invalid FIREBASE_SERVICE_ACCOUNT_BASE64:",
+      "Invalid FIREBASE_SERVICE_ACCOUNT_BASE64 configuration:",
       error
     );
 
@@ -89,26 +92,41 @@ function getAdminApp(): App {
   const serviceAccount =
     readServiceAccount();
 
-  cachedAdminApp = serviceAccount
-    ? initializeApp({
-        credential: cert(serviceAccount)
-      })
-    : initializeApp({
-        /*
-         * Local fallback:
-         * works when GOOGLE_APPLICATION_CREDENTIALS
-         * points to the service-account JSON.
-         */
-        credential: applicationDefault()
-      });
+  if (serviceAccount) {
+    cachedAdminApp = initializeApp({
+      credential: cert(serviceAccount),
+      projectId: serviceAccount.projectId
+    });
+
+    return cachedAdminApp;
+  }
+
+  const localCredentialsPath =
+    process.env
+      .GOOGLE_APPLICATION_CREDENTIALS
+      ?.trim();
+
+  if (
+    process.env.NODE_ENV ===
+      "production" ||
+    !localCredentialsPath
+  ) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_BASE64 is missing."
+    );
+  }
+
+  cachedAdminApp = initializeApp({
+    credential: applicationDefault()
+  });
 
   return cachedAdminApp;
 }
 
-export function getAdminAuth() {
+export function getAdminAuth(): Auth {
   return getAuth(getAdminApp());
 }
 
-export function getAdminDb() {
+export function getAdminDb(): Firestore {
   return getFirestore(getAdminApp());
 }
