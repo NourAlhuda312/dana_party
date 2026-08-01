@@ -1,0 +1,20 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 5
+  concurrency: 40
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: DEFAULT_EVENT_SLUG
+    value: dana
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Replace this in Firebase App Hosting → Environment variables.
+  # Do not commit a real secret.
+  - variable: SUBMISSION_HASH_SALT
+    secret: submissionHashSalt
+    availability:
+      - RUNTIME
