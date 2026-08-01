@@ -95,49 +95,86 @@ export default function MessageForm({
         })
       });
 
-   const contentType =
-  response.headers.get("content-type") ?? "";
 
-let result: {
-  ok?: boolean;
-  message?: string;
-  error?: string;
-} = {};
+      try {
+  const response = await fetch("/api/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      eventId,
+      name: cleanName,
+      message: cleanMessage,
+      visibility
+    })
+  });
 
-if (
-  contentType.includes(
-    "application/json"
-  )
-) {
-  result = (await response.json()) as {
-    ok?: boolean;
-    message?: string;
-    error?: string;
-  };
-} else {
-  const serverResponse =
-    await response.text();
+  const rawResponse = await response.text();
 
-  console.error(
-    "The messages API returned a non-JSON response:",
-    {
-      status: response.status,
-      statusText: response.statusText,
-      response: serverResponse
+  let result: ApiResponse = {};
+
+  if (rawResponse) {
+    try {
+      result = JSON.parse(rawResponse) as ApiResponse;
+    } catch {
+      console.error(
+        "The messages API returned a non-JSON response:",
+        {
+          status: response.status,
+          statusText: response.statusText,
+          contentType:
+            response.headers.get("content-type"),
+          responsePreview: rawResponse.slice(0, 500)
+        }
+      );
+
+      throw new Error(
+        response.status >= 500
+          ? "صار خطأ بالسيرفر وإحنا بنحفظ التهنئة."
+          : "وصل رد غير متوقّع من السيرفر."
+      );
     }
+  }
+
+  if (!response.ok || result.ok === false) {
+    throw new Error(
+      result.error ?? "ما قدرنا نحفظ التهنئة."
+    );
+  }
+
+  const isPrivateMessage =
+    visibility === "private";
+
+  setName("");
+  setMessage("");
+  setVisibility("public_named");
+
+  showFeedback(
+    "success",
+    isPrivateMessage
+      ? `وصلت رسالتك الخاصة لـ${eventName}، وما رح تظهر على لوح التهاني 🤍`
+      : `وصلت كلمتك لـ${eventName}، وشكرًا إنك شاركتنا الفرحة 🤍`
   );
 
-  throw new Error(
-    response.status >= 500
-      ? "صار خطأ بالسيرفر وإحنا بنحفظ التهنئة."
-      : "وصل رد غير متوقّع من السيرفر."
-  );
-}
+  onSuccess();
 
-if (!response.ok) {
-  throw new Error(
-    result.error ??
-      "ما قدرنا نحفظ التهنئة."
+  if (!isPrivateMessage) {
+    window.setTimeout(() => {
+      document
+        .getElementById("messages-wall")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+    }, 1300);
+  }
+} catch (error) {
+  showFeedback(
+    "error",
+    error instanceof Error
+      ? error.message
+      : "صار خطأ غير متوقّع. جرّبوا مرة ثانية."
   );
 }
 
