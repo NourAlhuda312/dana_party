@@ -3,17 +3,7 @@ import {
   randomUUID
 } from "node:crypto";
 
-import {
-  FieldValue
-} from "firebase-admin/firestore";
-
-import {
-  NextResponse
-} from "next/server";
-
-import {
-  getAdminDb
-} from "@/lib/firebase-admin";
+import { NextResponse } from "next/server";
 
 import {
   validateSubmission
@@ -30,6 +20,15 @@ class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    route: "/api/messages",
+    version: "messages-v3",
+    runtime: "nodejs"
+  });
 }
 
 function getNetworkFingerprint(
@@ -56,7 +55,7 @@ function getNetworkFingerprint(
 
   if (!salt || salt.length < 24) {
     throw new Error(
-      "Server configuration is missing SUBMISSION_HASH_SALT."
+      "SUBMISSION_HASH_SALT is missing or too short."
     );
   }
 
@@ -70,10 +69,10 @@ function getNetworkFingerprint(
 async function readSubmission(
   request: Request
 ): Promise<ReturnType<typeof validateSubmission>> {
-  let body: unknown;
+  let requestBody: unknown;
 
   try {
-    body = await request.json();
+    requestBody = await request.json();
   } catch {
     throw new ApiError(
       400,
@@ -82,7 +81,7 @@ async function readSubmission(
   }
 
   try {
-    return validateSubmission(body);
+    return validateSubmission(requestBody);
   } catch (error) {
     throw new ApiError(
       400,
@@ -93,18 +92,14 @@ async function readSubmission(
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    route: "/api/messages",
-    runtime: "nodejs",
-    version: "messages-v2"
-  });
-}
-
 export async function POST(request: Request) {
   try {
-    const input = await readSubmission(request);
+    console.log(
+      "Messages API: request handler started."
+    );
+
+    const input =
+      await readSubmission(request);
 
     const fingerprint =
       getNetworkFingerprint(
@@ -112,7 +107,32 @@ export async function POST(request: Request) {
         input.eventId
       );
 
-    const adminDb = getAdminDb();
+    /*
+     * Load Firebase Admin inside the handler.
+     * Import or initialization failures are now
+     * caught by this function's try/catch.
+     */
+    const [
+      firestoreModule,
+      firebaseAdminModule
+    ] = await Promise.all([
+      import("firebase-admin/firestore"),
+      import("@/lib/firebase-admin")
+    ]);
+
+    console.log(
+      "Messages API: Firebase modules loaded."
+    );
+
+    const { FieldValue } =
+      firestoreModule;
+
+    const adminDb =
+      firebaseAdminModule.getAdminDb();
+
+    console.log(
+      "Messages API: Firebase Admin initialized."
+    );
 
     const eventRef = adminDb
       .collection("events")
@@ -151,15 +171,15 @@ export async function POST(request: Request) {
           );
         }
 
-        const event =
+        const eventData =
           eventSnapshot.data() as {
             isOpen?: boolean;
             isPublished?: boolean;
           };
 
         if (
-          !event.isPublished ||
-          !event.isOpen
+          !eventData.isPublished ||
+          !eventData.isOpen
         ) {
           throw new ApiError(
             409,
@@ -195,25 +215,22 @@ export async function POST(request: Request) {
             ? input.name
             : "بدون اسم";
 
-        const commonData = {
-          message: input.message,
-          visibility: input.visibility,
-          displayName,
-          createdAt:
-            FieldValue.serverTimestamp(),
-          updatedAt:
-            FieldValue.serverTimestamp()
-        };
+        const timestamp =
+          FieldValue.serverTimestamp();
 
         transaction.create(
           submissionRef,
           {
-            ...commonData,
+            message: input.message,
+            visibility: input.visibility,
+            displayName,
             submittedName:
               input.name || null,
             status: isPublic
               ? "published"
-              : "private"
+              : "private",
+            createdAt: timestamp,
+            updatedAt: timestamp
           }
         );
 
@@ -240,6 +257,10 @@ export async function POST(request: Request) {
       }
     );
 
+    console.log(
+      "Messages API: message saved."
+    );
+
     return NextResponse.json(
       {
         ok: true
@@ -249,6 +270,22 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    const errorDetails =
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          }
+        : {
+            value: String(error)
+          };
+
+    console.error(
+      "Messages API failure:",
+      errorDetails
+    );
+
     if (error instanceof ApiError) {
       return NextResponse.json(
         {
@@ -261,16 +298,11 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error(
-      "Unexpected messages API error:",
-      error
-    );
-
     return NextResponse.json(
       {
         ok: false,
         error:
-          "صار خطأ وإحنا بنحفظ التهنئة."
+          "صار خطأ بالسيرفر وإحنا بنحفظ التهنئة."
       },
       {
         status: 500

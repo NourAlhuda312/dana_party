@@ -1,13 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState
+} from "react";
+
 import {
   User,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
 } from "firebase/auth";
-import { clientAuth } from "@/lib/firebase-client";
+
+import {
+  clientAuth
+} from "@/lib/firebase-client";
 
 interface AdminMessage {
   id: string;
@@ -18,6 +26,49 @@ interface AdminMessage {
   status: string;
   featured?: boolean;
   createdAt?: string | null;
+}
+
+interface AdminApiResponse {
+  ok?: boolean;
+  error?: string;
+  messages?: AdminMessage[];
+}
+
+async function readAdminApiResponse(
+  response: Response
+): Promise<AdminApiResponse> {
+  const rawResponse =
+    await response.text();
+
+  if (!rawResponse) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(
+      rawResponse
+    ) as AdminApiResponse;
+  } catch {
+    console.error(
+      "Admin API returned a non-JSON response:",
+      {
+        status: response.status,
+        statusText: response.statusText,
+        contentType:
+          response.headers.get(
+            "content-type"
+          ),
+        responsePreview:
+          rawResponse.slice(0, 500)
+      }
+    );
+
+    throw new Error(
+      response.status >= 500
+        ? "صار خطأ بالسيرفر."
+        : "وصل رد غير متوقّع من السيرفر."
+    );
+  }
 }
 
 export default function AdminConsole() {
@@ -84,48 +135,108 @@ async function readAdminApiResponse(
     }
   }
 
-  async function loadMessages(currentUser = user, selectedEvent = eventId) {
-    if (!currentUser) return;
-    setLoading(true);
-    try {
-      const token = await currentUser.getIdToken();
-      const response = await fetch(
-        `/api/admin/messages?eventId=${encodeURIComponent(selectedEvent)}`,
-        { headers: { authorization: `Bearer ${token}` } }
-      );
-const result =
-  await readAdminApiResponse(response);      if (!response.ok) throw new Error(result.error);
-      setMessages(result.messages ?? []);
-    } catch (error) {
-      setFeedback(
-        error instanceof Error ? error.message : "تعذّر تحميل التهاني."
-      );
-    } finally {
-      setLoading(false);
-    }
+async function loadMessages(
+  currentUser = user,
+  selectedEvent = eventId
+) {
+  if (!currentUser) {
+    return;
   }
 
-  async function action(messageId: string, command: string) {
-    if (!user) return;
-    const token = await user.getIdToken();
+  setLoading(true);
+  setFeedback("");
 
-    const response = await fetch("/api/admin/messages", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ eventId, messageId, action: command })
-    });
+  try {
+    const token =
+      await currentUser.getIdToken();
 
-    const result = await response.json();
+    const response = await fetch(
+      `/api/admin/messages?eventId=${encodeURIComponent(
+        selectedEvent
+      )}`,
+      {
+        headers: {
+          authorization:
+            `Bearer ${token}`
+        }
+      }
+    );
+
+    const result =
+      await readAdminApiResponse(response);
+
     if (!response.ok) {
-      setFeedback(result.error ?? "تعذّر تنفيذ العملية.");
-      return;
+      throw new Error(
+        result.error ??
+          "تعذّر تحميل التهاني."
+      );
+    }
+
+    setMessages(
+      result.messages ?? []
+    );
+  } catch (error) {
+    setFeedback(
+      error instanceof Error
+        ? error.message
+        : "تعذّر تحميل التهاني."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function action(
+  messageId: string,
+  command: string
+) {
+  if (!user) {
+    return;
+  }
+
+  setFeedback("");
+
+  try {
+    const token =
+      await user.getIdToken();
+
+    const response = await fetch(
+      "/api/admin/messages",
+      {
+        method: "POST",
+        headers: {
+          authorization:
+            `Bearer ${token}`,
+          "content-type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          eventId,
+          messageId,
+          action: command
+        })
+      }
+    );
+
+    const result =
+      await readAdminApiResponse(response);
+
+    if (!response.ok) {
+      throw new Error(
+        result.error ??
+          "تعذّر تنفيذ العملية."
+      );
     }
 
     await loadMessages();
+  } catch (error) {
+    setFeedback(
+      error instanceof Error
+        ? error.message
+        : "تعذّر تنفيذ العملية."
+    );
   }
+}
 
   if (loading && !user) {
     return <main className="admin-shell">جاري التحميل…</main>;
