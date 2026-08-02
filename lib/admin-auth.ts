@@ -17,7 +17,14 @@ const adminDb = getAdminDb();
     throw new Error("UNAUTHENTICATED");
   }
 
-  const decoded = await adminAuth.verifyIdToken(token);
+let decoded;
+
+try {
+  decoded =
+    await adminAuth.verifyIdToken(token);
+} catch {
+  throw new Error("UNAUTHENTICATED");
+}
   const adminSnapshot = await adminDb.collection("admins").doc(decoded.uid).get();
 
   if (!adminSnapshot.exists) {

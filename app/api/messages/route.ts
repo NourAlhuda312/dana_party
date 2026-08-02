@@ -93,6 +93,15 @@ async function readSubmission(
   }
 }
 
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    route: "/api/messages",
+    runtime: "nodejs",
+    version: "messages-v2"
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const input = await readSubmission(request);

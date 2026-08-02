@@ -58,161 +58,117 @@ export default function MessageForm({
   const nameHint = getNameHint(visibility, eventName);
 
   async function submit(
-    submitEvent: FormEvent<HTMLFormElement>
-  ) {
-    submitEvent.preventDefault();
+  submitEvent: FormEvent<HTMLFormElement>
+) {
+  submitEvent.preventDefault();
 
-    if (isSending) {
-      return;
-    }
-
-    const cleanName = name.trim();
-    const cleanMessage = message.trim();
-
-    if (cleanMessage.length < 2) {
-      showFeedback(
-        "error",
-        "اكتبوا كلمة أطول شوي قبل الإرسال."
-      );
-
-      return;
-    }
-
-    setStatus("sending");
-    setFeedback("");
-
-    try {
-      const response = await fetch("/api/messages", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          eventId,
-          name: cleanName,
-          message: cleanMessage,
-          visibility
-        })
-      });
-
-
-      try {
-  const response = await fetch("/api/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      eventId,
-      name: cleanName,
-      message: cleanMessage,
-      visibility
-    })
-  });
-
-  const rawResponse = await response.text();
-
-  let result: ApiResponse = {};
-
-  if (rawResponse) {
-    try {
-      result = JSON.parse(rawResponse) as ApiResponse;
-    } catch {
-      console.error(
-        "The messages API returned a non-JSON response:",
-        {
-          status: response.status,
-          statusText: response.statusText,
-          contentType:
-            response.headers.get("content-type"),
-          responsePreview: rawResponse.slice(0, 500)
-        }
-      );
-
-      throw new Error(
-        response.status >= 500
-          ? "صار خطأ بالسيرفر وإحنا بنحفظ التهنئة."
-          : "وصل رد غير متوقّع من السيرفر."
-      );
-    }
+  if (isSending) {
+    return;
   }
 
-  if (!response.ok || result.ok === false) {
-    throw new Error(
-      result.error ?? "ما قدرنا نحفظ التهنئة."
+  const cleanName = name.trim();
+  const cleanMessage = message.trim();
+
+  if (cleanMessage.length < 2) {
+    showFeedback(
+      "error",
+      "اكتبوا كلمة أطول شوي قبل الإرسال."
+    );
+
+    return;
+  }
+
+  setStatus("sending");
+  setFeedback("");
+
+  try {
+    const response = await fetch("/api/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        eventId,
+        name: cleanName,
+        message: cleanMessage,
+        visibility
+      })
+    });
+
+    const rawResponse = await response.text();
+
+    let result: ApiResponse = {};
+
+    if (rawResponse) {
+      try {
+        result = JSON.parse(
+          rawResponse
+        ) as ApiResponse;
+      } catch {
+        console.error(
+          "The messages API returned a non-JSON response:",
+          {
+            status: response.status,
+            statusText: response.statusText,
+            contentType:
+              response.headers.get(
+                "content-type"
+              ),
+            responsePreview:
+              rawResponse.slice(0, 500)
+          }
+        );
+
+        throw new Error(
+          response.status >= 500
+            ? "صار خطأ بالسيرفر وإحنا بنحفظ التهنئة."
+            : "وصل رد غير متوقّع من السيرفر."
+        );
+      }
+    }
+
+    if (!response.ok || result.ok === false) {
+      throw new Error(
+        result.error ??
+          "ما قدرنا نحفظ التهنئة."
+      );
+    }
+
+    const isPrivateMessage =
+      visibility === "private";
+
+    setName("");
+    setMessage("");
+    setVisibility("public_named");
+
+    showFeedback(
+      "success",
+      isPrivateMessage
+        ? `وصلت رسالتك الخاصة لـ${eventName}، وما رح تظهر على لوح التهاني 🤍`
+        : `وصلت كلمتك لـ${eventName}، وشكرًا إنك شاركتنا الفرحة 🤍`
+    );
+
+    onSuccess();
+
+    if (!isPrivateMessage) {
+      window.setTimeout(() => {
+        document
+          .getElementById("messages-wall")
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+          });
+      }, 1300);
+    }
+  } catch (error) {
+    showFeedback(
+      "error",
+      error instanceof Error
+        ? error.message
+        : "صار خطأ غير متوقّع. جرّبوا مرة ثانية."
     );
   }
-
-  const isPrivateMessage =
-    visibility === "private";
-
-  setName("");
-  setMessage("");
-  setVisibility("public_named");
-
-  showFeedback(
-    "success",
-    isPrivateMessage
-      ? `وصلت رسالتك الخاصة لـ${eventName}، وما رح تظهر على لوح التهاني 🤍`
-      : `وصلت كلمتك لـ${eventName}، وشكرًا إنك شاركتنا الفرحة 🤍`
-  );
-
-  onSuccess();
-
-  if (!isPrivateMessage) {
-    window.setTimeout(() => {
-      document
-        .getElementById("messages-wall")
-        ?.scrollIntoView({
-          behavior: "smooth",
-          block: "start"
-        });
-    }, 1300);
-  }
-} catch (error) {
-  showFeedback(
-    "error",
-    error instanceof Error
-      ? error.message
-      : "صار خطأ غير متوقّع. جرّبوا مرة ثانية."
-  );
 }
-
-      const isPrivateMessage =
-        visibility === "private";
-
-      setName("");
-      setMessage("");
-      setVisibility("public_named");
-
-      showFeedback(
-        "success",
-        isPrivateMessage
-          ? `وصلت رسالتك الخاصة لـ${eventName}، وما رح تظهر على لوح التهاني 🤍`
-          : `وصلت كلمتك لـ${eventName}، وشكرًا إنك شاركتنا الفرحة 🤍`
-      );
-
-      onSuccess();
-
-      if (!isPrivateMessage) {
-        window.setTimeout(() => {
-          document
-            .getElementById("messages-wall")
-            ?.scrollIntoView({
-              behavior: "smooth",
-              block: "start"
-            });
-        }, 1300);
-      }
-    } catch (error) {
-      showFeedback(
-        "error",
-        error instanceof Error
-          ? error.message
-          : "صار خطأ غير متوقّع. جرّبوا مرة ثانية."
-      );
-    }
-  }
 
   function showFeedback(
     nextStatus: Extract<FormStatus, "success" | "error">,

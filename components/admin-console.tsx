@@ -38,6 +38,41 @@ export default function AdminConsole() {
       }),
     [eventId]
   );
+interface AdminApiResponse {
+  ok?: boolean;
+  error?: string;
+  messages?: AdminMessage[];
+}
+
+async function readAdminApiResponse(
+  response: Response
+): Promise<AdminApiResponse> {
+  const rawResponse = await response.text();
+
+  if (!rawResponse) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(
+      rawResponse
+    ) as AdminApiResponse;
+  } catch {
+    console.error(
+      "Admin API returned a non-JSON response:",
+      {
+        status: response.status,
+        statusText: response.statusText,
+        responsePreview:
+          rawResponse.slice(0, 500)
+      }
+    );
+
+    throw new Error(
+      "وصل رد غير متوقّع من السيرفر."
+    );
+  }
+}
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -58,9 +93,9 @@ export default function AdminConsole() {
         `/api/admin/messages?eventId=${encodeURIComponent(selectedEvent)}`,
         { headers: { authorization: `Bearer ${token}` } }
       );
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
-      setMessages(result.messages);
+const result =
+  await readAdminApiResponse(response);      if (!response.ok) throw new Error(result.error);
+      setMessages(result.messages ?? []);
     } catch (error) {
       setFeedback(
         error instanceof Error ? error.message : "تعذّر تحميل التهاني."
